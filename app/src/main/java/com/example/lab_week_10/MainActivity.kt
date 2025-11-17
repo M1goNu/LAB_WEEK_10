@@ -3,12 +3,15 @@ package com.example.lab_week_10
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import com.example.lab_week_10.database.Total
 import com.example.lab_week_10.database.TotalDatabase
+import com.example.lab_week_10.database.TotalObject
 import com.example.lab_week_10.viewmodels.TotalViewModel
+import java.util.Date
 import kotlin.getValue
 
 class MainActivity : AppCompatActivity() {
@@ -21,6 +24,8 @@ class MainActivity : AppCompatActivity() {
         ViewModelProvider(this)[TotalViewModel::class.java]
     }
 
+    private var lastSavedDate: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -32,13 +37,35 @@ class MainActivity : AppCompatActivity() {
         prepareViewModel()
     }
 
+    override fun onStart() {
+        super.onStart()
+
+        Toast.makeText(
+            this,
+            lastSavedDate,
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     // Update the value of the total in the database
     // whenever the activity is paused
     // This is done to ensure that the value of the total is always up to date
     // even if the app is closed
     override fun onPause() {
         super.onPause()
-        db.totalDao().update(Total(ID, viewModel.total.value!!))
+
+        val newDate = Date().toString()
+
+        val updatedTotal = Total(
+            id = ID,
+            total = TotalObject(
+                value = viewModel.total.value!!,
+                date = newDate
+            )
+        )
+
+        db.totalDao().update(updatedTotal)
+        lastSavedDate = newDate
     }
 
     // Create and build the TotalDatabase with the name 'total-database'
@@ -47,19 +74,35 @@ class MainActivity : AppCompatActivity() {
     private fun prepareDatabase(): TotalDatabase {
         return Room.databaseBuilder(
             applicationContext,
-            TotalDatabase::class.java, "total-database"
-        ).allowMainThreadQueries().build()
+            TotalDatabase::class.java,
+            "total-database"
+        )
+            .fallbackToDestructiveMigration()
+            .allowMainThreadQueries()
+            .build()
     }
+
 
     // Initialize the value of the total from the database
     // If the database is empty, insert a new Total object with the value of 0
     // If the database is not empty, get the value of the total from the database
     private fun initializeValueFromDatabase() {
         val total = db.totalDao().getTotal(ID)
+
         if (total.isEmpty()) {
-            db.totalDao().insert(Total(id = 1, total = 0))
+            val initial = Total(
+                id = 1,
+                total = TotalObject(
+                    value = 0,
+                    date = Date().toString()
+                )
+            )
+            db.totalDao().insert(initial)
+            lastSavedDate = initial.total.date
         } else {
-            viewModel.setTotal(total.first().total)
+            val t = total.first()
+            viewModel.setTotal(t.total.value)
+            lastSavedDate = t.total.date
         }
     }
 
